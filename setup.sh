@@ -1,3 +1,3 @@
 #!/bin/sh
 
-export PYTHONPATH=/home/rosbuild/reprepro_updater/src
+export PYTHONPATH=/home/rosbuild/rpmrepo_updater/src

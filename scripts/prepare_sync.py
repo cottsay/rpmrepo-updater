@@ -1,6 +1,6 @@
-from reprepro_updater import conf
-from reprepro_updater.conf import ALL_ARCHES, ALL_DISTROS
-from reprepro_updater.helpers import LockContext
+from rpmrepo_updater import conf
+from rpmrepo_updater.conf import ALL_ARCHES, ALL_DISTROS
+from rpmrepo_updater.helpers import LockContext
 
 from optparse import OptionParser
 

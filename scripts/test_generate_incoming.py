@@ -1,4 +1,4 @@
-from reprepro_updater import conf
+from rpmrepo_updater import conf
 
 
 inc = conf.IncomingFile(['lucid', 'oneiric', 'precise'])

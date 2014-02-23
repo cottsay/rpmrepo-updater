@@ -4,10 +4,10 @@ import os
 import sys
 import shutil
 
-from reprepro_updater.helpers import \
+from rpmrepo_updater.helpers import \
     LockContext, delete_unreferenced,\
     run_update_command, invalidate_dependent, invalidate_package
-from reprepro_updater.changes_parsing import \
+from rpmrepo_updater.changes_parsing import \
     find_changes_files, load_changes_files
 
 parser = OptionParser()
