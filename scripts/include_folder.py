@@ -7,15 +7,10 @@ import shutil
 from rpmrepo_updater.helpers import \
     LockContext, delete_unreferenced,\
     run_update_command, invalidate_dependent, invalidate_package
-from rpmrepo_updater.changes_parsing import \
-    find_changes_files, load_changes_files
 
 parser = OptionParser()
 
 parser.add_option("--delete-folder", dest="do_delete", action='store_true', default=False)
-
-parser.add_option("-d", "--distro", dest="distro", help="unused")
-parser.add_option("-a", "--arch", dest="arch", help="unused")
 
 parser.add_option("-f", "--folder", dest="folders", action="append")
 parser.add_option("-p", "--package", dest="package")
@@ -23,7 +18,7 @@ parser.add_option("-p", "--package", dest="package")
 parser.add_option("-c", "--commit", dest="commit", action='store_true', default=False)
 parser.add_option("--invalidate", dest="invalidate", action='store_true', default=False)
 
-parser.add_option("--repo-path", dest="repo_path", default='/var/www/repos/building')
+parser.add_option("--repo-path", dest="repo_path", default='/mnt/storage/repos/smd-ros-building')
 
 
 (options, args) = parser.parse_args()
@@ -33,21 +28,16 @@ for f in options.folders:
     if not os.path.isdir(f):
         parser.error("Folder option must be a folder: %s" % f)
 
-changes_filenames = []
+rpm_filenames = []
 for folder in options.folders:
-    changes_filenames.extend(find_changes_files(folder))
-changefiles = load_changes_files(changes_filenames)
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            if file.endswith(".rpm"):
+                rpm_filenames.append(os.path.join(root, file))
 
-if not changefiles:
-    parser.error("Folders %s doesn't contain a changes file. %s" %
+if not rpm_filenames:
+    parser.error("Folders %s doesn't contain any RPM files. %s" %
                  (options.folders, [os.listdir(f) for f in options.folders]))
-
-valid_changes = [c for c in changefiles if c.content['Binary'] == options.package]
-
-extraneous_packages = set(changefiles) - set(valid_changes)
-if extraneous_packages:
-    parser.error("Invalid packages detected in folders %s. [%s]" %
-                 (options.folders, extraneous_packages))
 
 lockfile = os.path.join(options.repo_path, 'lock')
 
@@ -57,7 +47,7 @@ if options.commit:
         #invalidate and clear all first
 
         # only invalidate dependencies if invalidation is asked for
-        for changes in valid_changes:
+        for rpm in rpm_filenames:
             if options.invalidate:
                 if changes.content['Architecture'] != 'source':
                     if not invalidate_dependent(options.repo_path,

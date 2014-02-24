@@ -1,7 +1,7 @@
 import os
 import yaml
 
-from debian.deb822 import Changes
+#from debian.deb822 import Changes
 
 class ChangesFile:
     def __init__(self, filename):
