@@ -132,6 +132,13 @@ def read_from_rpm(init):
                    path = init)
 
 
+def read_repository(repo_path):
+    try:
+        return read_repository_sqlite(repo_path)
+    except IOError:
+        return read_repository_xml(repo_path)
+
+
 def read_repository_xml(repo_path):
     primary_xml = find_metadata_file(repo_path, 'primary')
     return read_primary_xml(repo_path, primary_xml)
@@ -190,11 +197,21 @@ def read_primary_xml(repo_path, primary_xml = os.path.join('repodata', 'primary.
         rpm_version = rpm_version_obj.getAttribute('ver')
         rpm_release = rpm_version_obj.getAttribute('rel')
         rpm_arch = pkg.getElementsByTagName('arch')[0].firstChild.data
-        rpm_format_obj = pkg.getElementsByTagName('format')[0]
-        rpm_requires_obj = rpm_format_obj.getElementsByTagName('rpm:requires')[0]
-        rpm_requires = set(r.getAttribute('name') for r in rpm_requires_obj.getElementsByTagName('rpm:entry'))
-        rpm_provides_obj = rpm_format_obj.getElementsByTagName('rpm:provides')[0]
-        rpm_provides = set(p.getAttribute('name') for p in rpm_provides_obj.getElementsByTagName('rpm:entry'))
+        try:
+            rpm_format_obj = pkg.getElementsByTagName('format')[0]
+        except (AttributeError, IndexError):
+            rpm_requires = rpm_provides = set()
+        else:
+            try:
+                rpm_requires_obj = rpm_format_obj.getElementsByTagName('rpm:requires')[0]
+                rpm_requires = set(r.getAttribute('name') for r in rpm_requires_obj.getElementsByTagName('rpm:entry'))
+            except (AttributeError, IndexError):
+                rpm_requires = set()
+            try:
+                rpm_provides_obj = rpm_format_obj.getElementsByTagName('rpm:provides')[0]
+                rpm_provides = set(p.getAttribute('name') for p in rpm_provides_obj.getElementsByTagName('rpm:entry'))
+            except (AttributeError, IndexError):
+                rpm_provides = set()
         rpm_location_obj = pkg.getElementsByTagName('location')[0]
         rpm_path = os.path.join(repo_path, rpm_location_obj.getAttribute('href'))
         pkgs.add(RpmInfo(name = rpm_name,
@@ -216,14 +233,17 @@ def read_primary_sqlite(repo_path, primary_xml = os.path.join('repodata', 'prima
 
     if not primary_sqlite.endswith('.sqlite') or url.scheme not in [None, '', 'file']:
         primary_sqlite_tmp = mktemp()
-        fdurl = urlopen(primary_sqlite)
+        if url.scheme not in [None, '', 'file']:
+            fd = urlopen(primary_sqlite)
+        else:
+            fd = open(primary_sqlite, 'rb')
         if primary_sqlite.endswith('.bz2'):
             with open(primary_sqlite_tmp, 'wb') as f:
-                f.write(bz2_decompress(fdurl.read()))
+                f.write(bz2_decompress(fd.read()))
         else:
             with open(primary_sqlite_tmp, 'wb') as f:
-                f.write(fdurl.read())
-        fdurl.close()
+                f.write(fd.read())
+        fd.close()
 
         primary_sqlite = primary_sqlite_tmp
 

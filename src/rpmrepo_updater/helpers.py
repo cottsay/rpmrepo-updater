@@ -1,10 +1,32 @@
-
-
 import subprocess
 import fcntl
 import time
 import sys
+import shutil
+import createrepo
+import yum.misc
+import os
+import rpminfo
 
+# TODO: Cache this
+def make_cr_conf():
+    def_workers = os.nice(0)
+    if def_workers > 0:
+        def_workers = 1
+    else:
+        def_workers = 0
+
+    conf = createrepo.MetaDataConfig()
+    conf.excludes = ['debug/*']
+    conf.quiet = True
+    conf.checksum = yum.misc._default_checksums[0]
+    conf.database = True
+    conf.update = True
+    conf.retain_old_md = 10
+    conf.compress_type = 'compat'
+    conf.workers = def_workers
+    conf.split = True
+    return conf
 
 class LockContext:
     def __init__(self, lockfilename = None, timeout = 3000):
@@ -38,57 +60,105 @@ class LockContext:
         self.lfh.close()
         return False
 
+def find_target_subrepos(repo_path, package):
+    if not package.fcdistro:
+        raise ValueError('Non-Fedora release tag ' + str(package.release) + ' on package ' + str(package.path))
+    fcver = str(package.fcdistro)
+    if package.is_src or package.arch == 'src':
+        candidate = os.path.join(repo_path, 'linux', fcver, 'SRPMS')
+        if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
+            raise ValueError('No valid repository for ' + str(package.path))
+        return set((candidate,))
+    elif package.arch == 'noarch':
+        arches = set()
+        for candidate in [x[0] for x in os.walk(os.path.join(repo_path, 'linux', fcver))]:
+            candidate = os.path.join(repo_path, 'linux', fcver, candidate)
+            if candidate != 'SRPMS' and os.file.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
+                arches.add(candidate)
+        if not arches:
+            raise ValueError('No valid repository for ' + str(package.path))
+        return arches
+    else:
+        candidate = os.path.join(repo_path, 'linux', fcver, str(package.arch))
+        if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
+            raise ValueError('No valid repository for ' + str(package.path))
+        return set((candidate,))
 
-def try_run_command(command):
+def update_metadata(repo_path):
+    if hasattr(repo_path, '__iter__'):
+        for repo in repo_path:
+            update_metadata(repo)
+        return
 
-        try:
-            subprocess.check_call(command)
-            return True
+    conf = make_cr_conf()
+    conf.directory = repo_path
+    conf.directories = [repo_path]
 
-        except Exception, ex:
-            print "Execution of [%s] Failed:" % command, ex
-            return False
+    print "Updating repository at " + repo_path
+    mdgen = createrepo.SplitMetaDataGenerator(config_obj=conf)
+    mdgen.doPkgMetadata()
+    mdgen.doRepoMetadata()
+    mdgen.doFinalMove()
 
+def place_package(repo_path, package, delayed_metadata = None):
+    md = set()
+    if hasattr(package, '__iter__'):
+        for pkg in package:
+            place_package(repo_path, pkg, delayed_metadata = md)
+    else:
+        for subrepo in find_target_subrepos(repo_path, package):
+            print "Placing " + package.path + " at " + subrepo
+            shutil.copy(package.path, subrepo)
+            md.add(subrepo)
+    if delayed_metadata is not None:
+        delayed_metadata |= md
+    else:
+        update_metadata(md)
 
-def delete_unreferenced(repo_dir):
-    cleanup_command = ['reprepro', '-v', '-b', repo_dir, 'deleteunreferenced']
-    print >>sys.stderr, "running", cleanup_command
-    return try_run_command(cleanup_command)
+def remove_package(repo_path, package, cache = None, delayed_metadata = None):
+    if cache is None:
+        cache = {}
+    md = set()
+    if hasattr(package, '__iter__'):
+        for pkg in package:
+            remove_package(repo_path, pkg, cache = cache, delayed_metadata = md)
+    else:
+        for subrepo in find_target_subrepos(repo_path, package):
+            if subrepo not in cache:
+                cache[subrepo] = rpminfo.read_repository(subrepo)
+            for pkg in cache[subrepo]:
+                if pkg.name == package.name:
+                    pkgpath = os.path.join(subrepo, pkg.path)
+                    if os.path.exists(pkgpath):
+                        print "Explicitly Removing " + str(pkgpath)
+                        os.remove(pkgpath)
+                    md.add(subrepo)
+    if delayed_metadata is not None:
+        delayed_metadata |= md
+    else:
+        update_metadata(md)
 
+# TODO: Thread this?
+def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
+    if cache is None:
+        cache = {}
+    md = set()
+    if hasattr(package, '__iter__'):
+        for pkg in package:
+            remove_package(repo_path, pkg, cache = cache, delayed_metadata = md)
+    else:
+        for subrepo in find_target_subrepos(repo_path, package):
+            if subrepo not in cache:
+                cache[subrepo] = rpminfo.read_repository(subrepo)
+            for pkg in cache[subrepo]:
+                if package.provides.intersects(pkg.requires):
+                    pkgpath = os.path.join(subrepo, pkg.path)
+                    if os.path.exists(pkgpath):
+                        print "Removing Dependant " + str(pkgpath)
+                        os.remove(pkgpath)
+                    md.add(subrepo)
+    if delayed_metadata is not None:
+        delayed_metadata |= md
+    else:
+        update_metadata(md)
 
-def run_update_command(repo_path, distro, changesfile):
-    """ Update the repo to add the files in this changes file """
-    # Force misc due to dry packages having invalid "unknown" section, the -S misc can be removed when dry is deprecated. 
-    update_command = ['reprepro', '-v', '-b', repo_path, '-S', 'misc', 'include', distro, changesfile]
-    print >>sys.stderr, "running command %s" % update_command
-    return try_run_command(update_command)
-
-
-def invalidate_dependent(repo_path, distro, arch, package):
-    """ Remove This all dependencies of the package with the same arch. 
-    This is only valid for binary packages. """
-
-    invalidate_dependent_command = ['reprepro', '-V', '-b', repo_path,
-                                    '-T', 'deb',
-                                    'removefilter', distro,
-                                    "Package (% ros-* ), " +
-                                    "Architecture (== " + arch + " ), " +
-                                    "( Depends (% *" + package + "[, ]* ) " +
-                                    "| Depends (% *"+package+" ) )"]
-
-    print >>sys.stderr, "running", invalidate_dependent_command
-    return try_run_command(invalidate_dependent_command)
-
-
-def invalidate_package(repo_path, distro, arch, package):
-    """Remove this package itself from the repo"""
-    debtype = 'deb' if arch != 'source' else 'dsc'
-    arch_match = ', Architecture (== ' + arch + ' )' if arch != 'source' else ''
-
-    invalidate_package_command = ['reprepro', '-b', repo_path,
-                                  '-T', debtype, '-V',
-                                  'removefilter', distro,
-                                  "Package (== "+package+" )"+arch_match]
-
-    print >>sys.stderr, "running", invalidate_package_command
-    return try_run_command(invalidate_package_command)
