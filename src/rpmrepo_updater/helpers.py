@@ -79,7 +79,14 @@ def find_target_subrepos(repo_path, package):
             raise ValueError('No valid repository for ' + str(package.path))
         return arches
     else:
-        candidate = os.path.join(repo_path, 'linux', fcver, str(package.arch))
+        if package.arch in ['i486', 'i586', 'i686']:
+            repoarch = 'i386'
+        else:
+            repoarch = package.arch
+        if package.name.endswith('-debuginfo'):
+            candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch), 'debug')
+        else:
+            candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch))
         if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
             raise ValueError('No valid repository for ' + str(package.path))
         return set((candidate,))
@@ -126,13 +133,22 @@ def remove_package(repo_path, package, cache = None, delayed_metadata = None):
         for subrepo in find_target_subrepos(repo_path, package):
             if subrepo not in cache:
                 cache[subrepo] = rpminfo.read_repository(subrepo)
+            to_be_removed = set()
             for pkg in cache[subrepo]:
                 if pkg.name == package.name:
-                    pkgpath = os.path.join(subrepo, pkg.path)
-                    if os.path.exists(pkgpath):
-                        print "Explicitly Removing " + str(pkgpath)
-                        os.remove(pkgpath)
-                    md.add(subrepo)
+                    to_be_removed.add(pkg)
+
+            for pkg in to_be_removed:
+                if pkg not in cache[subrepo]:
+                    continue
+                pkgpath = os.path.join(subrepo, pkg.path)
+                if os.path.exists(pkgpath):
+                    print "Explicitly Removing " + str(pkgpath)
+                    os.remove(pkgpath)
+                md.add(subrepo)
+                cache[subrepo].remove(pkg)
+                remove_debuginfo(subrepo, pkg.name, cache, md)
+
     if delayed_metadata is not None:
         delayed_metadata |= md
     else:
@@ -147,16 +163,60 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
         for pkg in package:
             remove_package(repo_path, pkg, cache = cache, delayed_metadata = md)
     else:
+        to_be_removed = set()
         for subrepo in find_target_subrepos(repo_path, package):
             if subrepo not in cache:
                 cache[subrepo] = rpminfo.read_repository(subrepo)
             for pkg in cache[subrepo]:
                 if package.provides.intersects(pkg.requires):
-                    pkgpath = os.path.join(subrepo, pkg.path)
-                    if os.path.exists(pkgpath):
-                        print "Removing Dependant " + str(pkgpath)
-                        os.remove(pkgpath)
-                    md.add(subrepo)
+                    to_be_removed.add(pkg)
+
+        for pkg in to_be_removed:
+            if pkg not in cache[subrepo]:
+                continue # Removed by recursive call
+            pkgpath = os.path.join(subrepo, pkg.path)
+            if os.path.exists(pkgpath):
+                print "Removing Dependant " + str(pkgpath)
+                os.remove(pkgpath)
+            md.add(subrepo)
+            cache[subrepo].remove(pkg)
+            remove_debuginfo(subrepo, pkg.name, cache, md)
+            remote_dependent(repo_path, pkg, cache, md)
+
+    if delayed_metadata is not None:
+        delayed_metadata |= md
+    else:
+        update_metadata(md)
+
+def remove_debuginfo(subrepo, packagename, cache = None, delayed_metadata = None):
+    if cache is None:
+        cache = {}
+    md = set()
+    if hasattr(packagename, '__iter__'):
+        for pkg in packagename:
+            remove_debuginfo(subrepo, pkg, cache = cache, delayed_metadata = md)
+    else:
+        debugrepo = os.path.join(subrepo, 'debug')
+        if not os.path.exists(os.path.join(debugrepo, 'repodata', 'repomd.xml')):
+            return
+        if debugrepo not in cache:
+            cache[debugrepo] = rpminfo.read_repository(debugrepo)
+        packagename += '-debuginfo'
+        to_be_removed = set()
+        for pkg in cache[debugrepo]:
+            if pkg.name == packagename:
+                to_be_removed.add(pkg)
+
+        for pkg in to_be_removed:
+            if pkg not in cache[debugrepo]:
+                continue
+            pkgpath = os.path.join(debugrepo, pkg.path)
+            if os.path.exists(pkgpath):
+                print "Removing debuginfo " + str(pkgpath)
+                os.remove(pkgpath)
+            md.add(debugrepo)
+            cache[debugrepo].remove(pkg)
+            
     if delayed_metadata is not None:
         delayed_metadata |= md
     else:
