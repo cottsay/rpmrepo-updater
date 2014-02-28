@@ -161,14 +161,14 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
     md = set()
     if hasattr(package, '__iter__'):
         for pkg in package:
-            remove_package(repo_path, pkg, cache = cache, delayed_metadata = md)
+            remove_dependent(repo_path, pkg, cache = cache, delayed_metadata = md)
     else:
         to_be_removed = set()
         for subrepo in find_target_subrepos(repo_path, package):
             if subrepo not in cache:
                 cache[subrepo] = rpminfo.read_repository(subrepo)
             for pkg in cache[subrepo]:
-                if package.provides.intersects(pkg.requires):
+                if package.provides.intersection(pkg.requires):
                     to_be_removed.add(pkg)
 
         for pkg in to_be_removed:
@@ -181,7 +181,7 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
             md.add(subrepo)
             cache[subrepo].remove(pkg)
             remove_debuginfo(subrepo, pkg.name, cache, md)
-            remote_dependent(repo_path, pkg, cache, md)
+            remove_dependent(repo_path, pkg, cache, md)
 
     if delayed_metadata is not None:
         delayed_metadata |= md
