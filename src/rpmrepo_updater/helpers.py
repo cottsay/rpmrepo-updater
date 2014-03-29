@@ -81,6 +81,10 @@ def find_target_subrepos(repo_path, package):
     else:
         if package.arch in ['i486', 'i586', 'i686']:
             repoarch = 'i386'
+        elif package.arch in ['armv5tel']:
+            repoarch = 'arm'
+        elif package.arch in ['armv7hl']:
+            repoarch = 'armhfp'
         else:
             repoarch = package.arch
         if package.name.endswith('-debuginfo'):
