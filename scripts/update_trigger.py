@@ -12,7 +12,7 @@ parser.add_argument("--result-path", dest="result_path", default="result.txt")
 parser.add_argument("--repo-path", dest="repo_path", default=None)
 # TODO: Handle multiple -f's
 parser.add_argument("-f", dest="include_path")
-parser.add_argument("--default", dest="delete", action='store_true', default=False)
+parser.add_argument("--delete", dest="delete", action='store_true', default=False)
 
 args = parser.parse_args()
 

@@ -66,7 +66,7 @@ class QueueMonitor:
             print('Queue is empty. Monitoring...')
 
     def process(self, files, dest=None):
-        print('Processing %d files for %s...' % (len(files), dest or 'default'))
+        print('Processing %d files for %s...' % (len(files), dest or 'default repo'))
         try:
             repo_path = ['--repo-path', dest] if dest else []
             out = subprocess.check_output(['python', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'include_folder.py'), '--invalidate', '-c'] + repo_path + ['-f'] + files, stderr=subprocess.STDOUT)
