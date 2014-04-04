@@ -22,7 +22,7 @@ def make_cr_conf():
     conf.checksum = yum.misc._default_checksums[0]
     conf.database = True
     conf.update = True
-    conf.retain_old_md = 10
+    conf.retain_old_md = 15
     conf.compress_type = 'compat'
     conf.workers = def_workers
     conf.split = True
