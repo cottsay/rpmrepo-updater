@@ -67,11 +67,15 @@ class QueueMonitor:
 
     def process(self, files, dest=None):
         print('Processing %d files for %s...' % (len(files), dest or 'default repo'))
+        repo_path = ['--repo-path', dest] if dest else []
+        file_args = []
+        for f in files:
+            file_args += ['-f', f]
+        cmd = ['python', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'include_folder.py'), '--invalidate', '-c'] + repo_path + file_args
         try:
-            repo_path = ['--repo-path', dest] if dest else []
-            out = subprocess.check_output(['python', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'include_folder.py'), '--invalidate', '-c'] + repo_path + ['-f'] + files, stderr=subprocess.STDOUT)
+            out = 'Executing: ' + ' '.join(cmd) + '\n' + subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError, e:
-            out = 'FAILED\n%s' % (e.output,)
+            out = 'FAILED\nExecuting: %s\n%s' % (' '.join(cmd), e.output)
             sys.stderr.write('WARNING: Failed to process entry: %s\n' % (dest if dest else "default",))
         for d in files:
             try:
