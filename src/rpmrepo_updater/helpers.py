@@ -64,36 +64,43 @@ def find_target_subrepos(repo_path, package):
     if not package.fcdistro:
         raise ValueError('Non-Fedora release tag ' + str(package.release) + ' on package ' + str(package.path))
     fcver = str(package.fcdistro)
+
     if package.is_src or package.arch == 'src':
         candidate = os.path.join(repo_path, 'linux', fcver, 'SRPMS')
         if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
             raise ValueError('No valid repository for ' + str(package.path))
         return set((candidate,))
-    elif package.arch == 'noarch':
-        arches = set()
-        for candidate in [x[0] for x in os.walk(os.path.join(repo_path, 'linux', fcver))]:
-            candidate = os.path.join(repo_path, 'linux', fcver, candidate)
-            if candidate != 'SRPMS' and os.file.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
-                arches.add(candidate)
-        if not arches:
+
+    repoarch = package.arch
+
+    if repoarch == 'noarch':
+        # We can't extract the target arch from the RPM. We have two choices:
+        # - Try to extract the target arch from the upload directory
+        # - Copy the noarch rpm to each available arch
+        #
+        # We'll do the former if extraction seems possible. The latter sounds
+        # sort-of unsafe, so bail otherwise
+
+        # As a path check, verfiy that our fedora version matches
+        fcver_dir = os.path.basename(os.path.dirname(os.path.dirname(package.path)))
+        if fcver_dir == fcver:
+            repoarch = os.path.basename(os.path.dirname(package.path))
+        else:
             raise ValueError('No valid repository for ' + str(package.path))
-        return arches
+
+    if repoarch in ['i486', 'i586', 'i686']:
+        repoarch = 'i386'
+    elif repoarch in ['armv5tel']:
+        repoarch = 'arm'
+    elif repoarch in ['armv7hl']:
+        repoarch = 'armhfp'
+    if package.name.endswith('-debuginfo'):
+        candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch), 'debug')
     else:
-        if package.arch in ['i486', 'i586', 'i686']:
-            repoarch = 'i386'
-        elif package.arch in ['armv5tel']:
-            repoarch = 'arm'
-        elif package.arch in ['armv7hl']:
-            repoarch = 'armhfp'
-        else:
-            repoarch = package.arch
-        if package.name.endswith('-debuginfo'):
-            candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch), 'debug')
-        else:
-            candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch))
-        if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
-            raise ValueError('No valid repository for ' + str(package.path))
-        return set((candidate,))
+        candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch))
+    if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
+        raise ValueError('No valid repository for ' + str(package.path))
+    return set((candidate,))
 
 def update_metadata(repo_path):
     if hasattr(repo_path, '__iter__'):
