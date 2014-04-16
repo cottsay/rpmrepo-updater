@@ -60,17 +60,7 @@ class LockContext:
         self.lfh.close()
         return False
 
-def find_target_subrepos(repo_path, package):
-    if not package.fcdistro:
-        raise ValueError('Non-Fedora release tag ' + str(package.release) + ' on package ' + str(package.path))
-    fcver = str(package.fcdistro)
-
-    if package.is_src or package.arch == 'src':
-        candidate = os.path.join(repo_path, 'linux', fcver, 'SRPMS')
-        if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
-            raise ValueError('No valid repository for ' + str(package.path))
-        return set((candidate,))
-
+def determine_archdir(package):
     repoarch = package.arch
 
     if repoarch == 'noarch':
@@ -82,6 +72,7 @@ def find_target_subrepos(repo_path, package):
         # sort-of unsafe, so bail otherwise
 
         # As a path check, verfiy that our fedora version matches
+        fcver = str(package.fcdistro)
         fcver_dir = os.path.basename(os.path.dirname(os.path.dirname(package.path)))
         if fcver_dir == fcver:
             repoarch = os.path.basename(os.path.dirname(package.path))
@@ -94,6 +85,27 @@ def find_target_subrepos(repo_path, package):
         repoarch = 'arm'
     elif repoarch in ['armv7hl']:
         repoarch = 'armhfp'
+
+    return repoarch
+
+def find_target_subrepos(repo_path, package, arch_hint = None):
+    if not package.fcdistro:
+        raise ValueError('Non-Fedora release tag ' + str(package.release) + ' on package ' + str(package.path))
+    fcver = str(package.fcdistro)
+
+    if package.is_src or package.arch == 'src':
+        candidate = os.path.join(repo_path, 'linux', fcver, 'SRPMS')
+        if not os.path.exists(os.path.join(candidate, 'repodata', 'repomd.xml')):
+            raise ValueError('No valid repository for ' + str(package.path))
+        return set((candidate,))
+
+    try:
+        repoarch = determine_archdir(package)
+    except ValueError:
+        if arch_hint is None:
+            raise
+        repoarch = arch_hint
+
     if package.name.endswith('-debuginfo'):
         candidate = os.path.join(repo_path, 'linux', fcver, str(repoarch), 'debug')
     else:
@@ -166,7 +178,7 @@ def remove_package(repo_path, package, cache = None, delayed_metadata = None):
         update_metadata(md)
 
 # TODO: Thread this?
-def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
+def remove_dependent(repo_path, package, cache = None, delayed_metadata = None, arch_hint = None):
     if cache is None:
         cache = {}
     md = set()
@@ -174,8 +186,11 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
         for pkg in package:
             remove_dependent(repo_path, pkg, cache = cache, delayed_metadata = md)
     else:
+        if arch_hint is None:
+            arch_hint = determine_archdir(package)
+
         to_be_removed = set()
-        for subrepo in find_target_subrepos(repo_path, package):
+        for subrepo in find_target_subrepos(repo_path, package, arch_hint):
             if subrepo not in cache:
                 cache[subrepo] = rpminfo.read_repository(subrepo)
             for pkg in cache[subrepo]:
@@ -191,8 +206,9 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None):
                 os.remove(pkgpath)
             md.add(subrepo)
             cache[subrepo].remove(pkg)
-            remove_debuginfo(subrepo, pkg.name, cache, md)
-            remove_dependent(repo_path, pkg, cache, md)
+            if not pkg.arch == 'noarch':
+                remove_debuginfo(subrepo, pkg.name, cache, md)
+            remove_dependent(repo_path, pkg, cache, md, arch_hint)
 
     if delayed_metadata is not None:
         delayed_metadata |= md
