@@ -194,7 +194,9 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None, 
             if subrepo not in cache:
                 cache[subrepo] = rpminfo.read_repository(subrepo)
             for pkg in cache[subrepo]:
-                if package.provides.intersection(pkg.requires):
+                # Can't do this because it crosses rosdistros
+                #if package.provides.intersection(pkg.requires):
+                if package.name in pkg.requires:
                     to_be_removed.add(pkg)
 
         for pkg in to_be_removed:
