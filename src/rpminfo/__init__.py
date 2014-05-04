@@ -226,10 +226,10 @@ def read_primary_xml(repo_path, primary_xml = os.path.join('repodata', 'primary.
     return pkgs
 
 
-def read_primary_sqlite(repo_path, primary_xml = os.path.join('repodata', 'primary.sqlite')):
-    primary_sqlite = os.path.join(repo_path, primary_xml)
+def read_primary_sqlite(repo_path, primary_sqlite = os.path.join('repodata', 'primary.sqlite')):
+    primary_sqlite = os.path.join(repo_path, primary_sqlite)
     primary_sqlite_tmp = None
-    url = urlparse(primary_xml)
+    url = urlparse(primary_sqlite)
 
     if not primary_sqlite.endswith('.sqlite') or url.scheme not in [None, '', 'file']:
         primary_sqlite_tmp = mktemp()
