@@ -16,7 +16,7 @@ from threading import Thread
 ts = rpm.TransactionSet()
 # We really don't care about signatures...
 ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
-fver = re.compile('.*fc(\d+)')
+fver = re.compile('(.*)\.fc(\d+)')
 
 class RpmInfo:
     name = None
@@ -28,6 +28,7 @@ class RpmInfo:
     provides = None
     path = None
     __fcdistro = None
+    __pkgrel = None
 
     def __init__(self, name = None, version = None, release = None,
                  is_src = None, arch = None, requires = None, provides = None,
@@ -45,11 +46,23 @@ class RpmInfo:
     def fcdistro(self):
         if not self.__fcdistro:
             try:
-                self.__fcdistro = int(re.match(fver, self.release).group(1))
+                self.__pkgrel = int(re.match(fver, self.release).group(1))
+                self.__fcdistro = int(re.match(fver, self.release).group(2))
             except:
                 pass
 
         return self.__fcdistro
+
+    @property
+    def pkgrel(self):
+        if not self.__pkgrel:
+            try:
+                self.__pkgrel = int(re.match(fver, self.release).group(1))
+                self.__fcdistro = int(re.match(fver, self.release).group(2))
+            except:
+                pass
+
+        return self.__pkgrel
 
     def has_requires(self, reqs):
         if not hasattr(reqs, '__iter__'):
