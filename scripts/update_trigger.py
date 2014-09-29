@@ -1,9 +1,11 @@
 from argparse import ArgumentParser
 
+import datetime
 import os
 import fcntl
 import pyinotify
 import shutil
+import sys
 
 parser = ArgumentParser()
 
@@ -27,18 +29,19 @@ class EventHandler(pyinotify.ProcessEvent):
     def process_default(self, event):
         outstr = self._fileobj.read()
         self._fileobj.close()
-        print(outstr)
+        sys.stdout.write(outstr)
         if outstr.startswith('FAILED'):
             exit(1)
         if self._includepath:
             shutil.rmtree(self._includepath)
+        print('[%s] Upload complete' % (datetime.datetime.utcnow(),))
         exit(0)
 
 handler = EventHandler(fileobj=result_fd, includepath=args.include_path if args.delete else None)
 notifier = pyinotify.Notifier(wm, handler)
 wdd = wm.add_watch(result_path, pyinotify.IN_MODIFY, rec=True)
 
-print('Joining queue...')
+print('[%s] Joining queue...' % (datetime.datetime.utcnow(),))
 with open(args.queue_path, 'a') as queue_fd:
     fcntl.lockf(queue_fd, fcntl.LOCK_EX)
     queue_fd.write(args.include_path)
@@ -47,5 +50,5 @@ with open(args.queue_path, 'a') as queue_fd:
     queue_fd.write('\n')
     fcntl.lockf(queue_fd, fcntl.LOCK_UN)
 
-print('In queue. Waiting for report...')
+print('[%s] In queue. Waiting for report...' % (datetime.datetime.utcnow(),))
 notifier.loop()

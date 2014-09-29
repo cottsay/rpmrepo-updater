@@ -186,9 +186,10 @@ def remove_dependent(repo_path, package, cache = None, delayed_metadata = None, 
         for pkg in package:
             remove_dependent(repo_path, pkg, cache = cache, delayed_metadata = md)
     else:
+        if package.is_src or package.arch == 'src':
+            return
         if arch_hint is None:
             arch_hint = determine_archdir(package)
-
         to_be_removed = set()
         for subrepo in find_target_subrepos(repo_path, package, arch_hint):
             if subrepo not in cache:
