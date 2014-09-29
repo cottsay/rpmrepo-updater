@@ -105,7 +105,11 @@ class QueueMonitor:
 
             for repo_base, packages in pkgs.items():
                 package_names = set([p.name for p in packages])
-                createrepo_updater.cr_remove_downstream(repo_base, package_names, log=sio)
+                for p in packages:
+                    parch = p.arch
+                    break
+                if not parch.lower() in ['src', 'source']:
+                    createrepo_updater.cr_remove_downstream(repo_base, package_names, log=sio)
                 createrepo_updater.cr_remove_pkg(repo_base, package_names, log=sio)
                 createrepo_updater.cr_add_pkg(repo_base, packages, log=sio)
 

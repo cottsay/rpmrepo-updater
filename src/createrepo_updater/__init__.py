@@ -145,6 +145,8 @@ def cr_remove_pkg(repo_base, tbr, remove_debuginfo=True, pkglist=None, log=sys.s
             cr_try_remove_debuginfo(repo_base, p.name, log)
 
 def cr_try_remove_debuginfo(repo_base, tbr, log=sys.stdout):
+    if os.path.basename(os.path.dirname(repo_base + '/')) == 'debug':
+        return
     repo_base = os.path.join(repo_base, 'debug')
 
     if not hasattr(tbr, '__iter__'):
@@ -326,6 +328,8 @@ def cr_determine_subrepo(pkg, log=sys.stdout):
         repoarch = 'arm'
     elif repoarch in ['armv7hl']:
         repoarch = 'armhfp'
+    elif repoarch in ['src', 'source']:
+        repoarch = 'SRPMS'
 
     if pkg.name.endswith('-debuginfo'):
         return os.path.join(fcver, repoarch, 'debug')
