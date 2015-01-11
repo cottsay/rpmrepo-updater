@@ -43,6 +43,8 @@ def cr_get_pkg_list(repo_base, log=sys.stdout):
     if not repo_base in pkg_list_cache:
         log.write('[%s] Parsing repodata from %s\n' % (stamp(), repo_base))
         md = cr.Metadata()
+        if not os.path.isfile(os.path.join(repo_base, 'repodata', 'repomd.xml')):
+            raise Exception('Invalid repodata path: %s' % (repo_base,))
         md.locate_and_load_xml(repo_base)
         pkgs = set()
         for key in md.keys():
@@ -88,7 +90,7 @@ def cr_flush_pkg_list(repo_base, pkglist=None, reset_orig=True, log=sys.stdout):
     if reset_orig:
         pkg_list_cache_orig[b] = pkg_list_cache[b]
 
-def cr_remove_downstream(repo_base, tbr, remove_debuginfo=True, pkglist=None, log=sys.stdout):
+def cr_remove_downstream(repo_base, tbr, remove_debuginfo=True, pkglist=None, perform_delete=True, log=sys.stdout):
     if pkglist is None:
         pkglist = cr_get_pkg_list(repo_base, log)
 
@@ -105,14 +107,17 @@ def cr_remove_downstream(repo_base, tbr, remove_debuginfo=True, pkglist=None, lo
         if len(deadlist):
             for p in deadlist:
                 pkglist.remove(p)
-                log.write('[%s] Removing dependant %s\n' % (stamp(), p.location_href))
-                try:
-                    os.remove(os.path.join(repo_base, p.location_href))
-                except OSError, e:
-                    if e.errno != 2:
-                        raise
+                if perform_delete:
+                    log.write('[%s] Removing dependant %s\n' % (stamp(), p.location_href))
+                    try:
+                        os.remove(os.path.join(repo_base, p.location_href))
+                    except OSError, e:
+                        if e.errno != 2:
+                            raise
+                else:
+                    log.write('[%s] DRY-RUN: Removing dependant %s\n' % (stamp(), p.location_href))
                 if remove_debuginfo and p.arch.lower() in ['noarch', 'src', 'source', None]:
-                    cr_try_remove_debuginfo(repo_base, p.name, log)
+                    cr_try_remove_debuginfo(repo_base, p.name, perform_delete, log)
 
             return __remove_downstream(set([d.name for d in deadlist]))
 
@@ -121,7 +126,7 @@ def cr_remove_downstream(repo_base, tbr, remove_debuginfo=True, pkglist=None, lo
 
     return __remove_downstream(tbr)
 
-def cr_remove_pkg(repo_base, tbr, remove_debuginfo=True, pkglist=None, log=sys.stdout):
+def cr_remove_pkg(repo_base, tbr, remove_debuginfo=True, pkglist=None, perform_delete=True, log=sys.stdout):
     if pkglist is None:
         pkglist = cr_get_pkg_list(repo_base, log)
 
@@ -135,16 +140,19 @@ def cr_remove_pkg(repo_base, tbr, remove_debuginfo=True, pkglist=None, log=sys.s
 
     for p in deadlist:
         pkglist.remove(p)
-        log.write('[%s] Specifically removing %s\n' % (stamp(), p.location_href))
-        try:
-            os.remove(p.location_href)
-        except OSError, e:
-            if e.errno != 2:
-                raise
+        if perform_delete:
+            log.write('[%s] Specifically removing %s\n' % (stamp(), p.location_href))
+            try:
+                os.remove(p.location_href)
+            except OSError, e:
+                if e.errno != 2:
+                    raise
+        else:
+            log.write('[%s] DRY-RUN: Specifically removing %s\n' % (stamp(), p.location_href))
         if remove_debuginfo and not p.arch.lower() in ['noarch', 'src', 'source', None]:
-            cr_try_remove_debuginfo(repo_base, p.name, log)
+            cr_try_remove_debuginfo(repo_base, p.name, perform_delete, log)
 
-def cr_try_remove_debuginfo(repo_base, tbr, log=sys.stdout):
+def cr_try_remove_debuginfo(repo_base, tbr, perform_delete=True, log=sys.stdout):
     if os.path.basename(os.path.dirname(repo_base + '/')) == 'debug':
         return
     repo_base = os.path.join(repo_base, 'debug')
@@ -159,9 +167,9 @@ def cr_try_remove_debuginfo(repo_base, tbr, log=sys.stdout):
     except: # TODO: Make this more specific to "doesn't exist"
         return
 
-    return cr_remove_pkg(repo_base, tbr, pkglist, log)
+    return cr_remove_pkg(repo_base, tbr, False, pkglist, perform_delete, log)
 
-def cr_add_pkg(repo_base, pkgs, pkglist=None, log=sys.stdout):
+def cr_add_pkg(repo_base, pkgs, pkglist=None, add_debuginfo=True, perform_relocate=True, copy=False, log=sys.stdout):
     if pkglist is None:
         pkglist = cr_get_pkg_list(repo_base, log)
 
@@ -170,17 +178,63 @@ def cr_add_pkg(repo_base, pkgs, pkglist=None, log=sys.stdout):
 
     for pkg in pkgs:
         new_path = os.path.join(repo_base, os.path.basename(pkg.location_href))
-        try:
-            log.write('[%s] Relocating package %s to %s\n' % (stamp(), os.path.basename(pkg.location_href), repo_base))
-            os.rename(pkg.location_href, new_path)
-        except OSError, e:
-            if e.errno != 18:
-                raise
-            log.write('[%s] WARNING: Cross-device link detected for %s. Moving...\n' % (stamp(), os.path.basename(new_path)))
-            shutil.move(pkg.location_href, new_path)
+        if not os.path.isfile(pkg.location_href):
+            raise Exception('Target package does not exist or is not a file: %s' % (pkg.location_href,))
+        if perform_relocate:
+            if copy:
+                log.write('[%s] Copying package %s to %s\n' % (stamp(), os.path.basename(pkg.location_href), repo_base))
+                shutil.copyfile(pkg.location_href, new_path)
+            else:
+                try:
+                    log.write('[%s] Relocating package %s to %s\n' % (stamp(), os.path.basename(pkg.location_href), repo_base))
+                    os.rename(pkg.location_href, new_path)
+                except OSError, e:
+                    if e.errno != 18:
+                        raise
+                    log.write('[%s] WARNING: Cross-device link detected for %s. Moving...\n' % (stamp(), os.path.basename(new_path)))
+                    shutil.move(pkg.location_href, new_path)
+        else:
+            log.write('[%s] DRY-RUN: %s package %s to %s\n' % (stamp(), 'Copying' if copy else 'Relocating', os.path.basename(pkg.location_href), repo_base))
+        if add_debuginfo:
+            cr_try_add_debuginfo(repo_base, set([pkg]), perform_relocate, copy, log)
         pkg.location_href = os.path.basename(new_path)
     log.write('[%s] Adding %d packages to metadata\n' % (stamp(), len(pkgs)))
     pkglist.update(pkgs)
+
+def cr_try_add_debuginfo(repo_base, pkgs, perform_relocate=True, copy=False, log=sys.stdout):
+    if os.path.basename(os.path.dirname(repo_base + '/')) == 'debug':
+        return
+    repo_base = os.path.join(repo_base, 'debug')
+
+    if not hasattr(pkgs, '__iter__'):
+        pkgs = set([pkgs])
+
+    dbgpkgs = dict()
+
+    for pkg in pkgs:
+        dbg_repo_base = os.path.join(os.path.dirname(pkg.location_href), 'debug')
+        try:
+            dbg_pkglist = cr_get_pkg_list(dbg_repo_base, log)
+        except: # TODO: Make this more specific to "doesn't exist"
+            continue
+
+        this_dbginfo_name = pkg.name + '-debuginfo'
+
+        found_dbgpkgs = [p.copy() for p in dbg_pkglist if p.name == this_dbginfo_name]
+
+        if not found_dbgpkgs:
+            continue
+
+        for dp in found_dbgpkgs:
+            dp.location_href = os.path.join(dbg_repo_base, dp.location_href)
+
+        if not dbg_repo_base in dbgpkgs:
+            dbgpkgs[dbg_repo_base] = set()
+
+        dbgpkgs[dbg_repo_base].update(found_dbgpkgs)
+
+    for dbgpkg in dbgpkgs.values():
+        cr_add_pkg(repo_base, dbgpkg, None, False, perform_relocate, copy, log)
 
 def cr_create_md(repodata_path, pkglist=None, log=sys.stdout):
     if pkglist is None:

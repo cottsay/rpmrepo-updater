@@ -111,7 +111,7 @@ class QueueMonitor:
                 if not parch.lower() in ['src', 'source']:
                     createrepo_updater.cr_remove_downstream(repo_base, package_names, log=sio)
                 createrepo_updater.cr_remove_pkg(repo_base, package_names, log=sio)
-                createrepo_updater.cr_add_pkg(repo_base, packages, log=sio)
+                createrepo_updater.cr_add_pkg(repo_base, packages, add_debuginfo=False, perform_relocate=True, copy=False, log=sio)
 
             createrepo_updater.cr_flush_all_pkg_list(sio)
 
