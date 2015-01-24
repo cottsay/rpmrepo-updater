@@ -135,7 +135,7 @@ def cr_remove_pkg(repo_base, tbr, remove_debuginfo=True, pkglist=None, perform_d
 
     deadlist = set()
     for p in pkglist:
-        if p.name in tbr:
+        if p.name in tbr or p.nvra() in tbr:
             deadlist.add(p)
 
     for p in deadlist:
