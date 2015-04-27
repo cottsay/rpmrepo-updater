@@ -380,7 +380,7 @@ def cr_determine_subrepo(pkg, log=sys.stdout):
         repoarch = 'i386'
     elif repoarch in ['armv5tel']:
         repoarch = 'arm'
-    elif repoarch in ['armv7hl']:
+    elif repoarch in ['armv7hl', 'armv7hnl']:
         repoarch = 'armhfp'
     elif repoarch in ['src', 'source']:
         repoarch = 'SRPMS'

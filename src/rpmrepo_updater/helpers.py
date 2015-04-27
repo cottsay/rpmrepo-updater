@@ -83,7 +83,7 @@ def determine_archdir(package):
         repoarch = 'i386'
     elif repoarch in ['armv5tel']:
         repoarch = 'arm'
-    elif repoarch in ['armv7hl']:
+    elif repoarch in ['armv7hl', 'armv7hnl']:
         repoarch = 'armhfp'
 
     return repoarch
