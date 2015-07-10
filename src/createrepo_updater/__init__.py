@@ -143,7 +143,7 @@ def cr_remove_pkg(repo_base, tbr, remove_debuginfo=True, pkglist=None, perform_d
         if perform_delete:
             log.write('[%s] Specifically removing %s\n' % (stamp(), p.location_href))
             try:
-                os.remove(p.location_href)
+                os.remove(os.path.join(repo_base, p.location_href))
             except OSError, e:
                 if e.errno != 2:
                     raise
