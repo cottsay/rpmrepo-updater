@@ -41,6 +41,10 @@ handler = EventHandler(fileobj=result_fd, includepath=args.include_path if args.
 notifier = pyinotify.Notifier(wm, handler)
 wdd = wm.add_watch(result_path, pyinotify.IN_MODIFY, rec=True)
 
+dirname = os.path.dirname(args.queue_path)
+if not os.path.exists(dirname):
+    os.makedirs(dirname)
+
 print('[%s] Joining queue...' % (datetime.datetime.utcnow(),))
 with open(args.queue_path, 'a') as queue_fd:
     fcntl.lockf(queue_fd, fcntl.LOCK_EX)

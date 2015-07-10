@@ -22,8 +22,9 @@ class QueueMonitor:
         self.queue_path = queue_path
         self.result_path = result_path
 
-        if not os.path.isdir(os.path.dirname(queue_path)):
-            os.mkdir(os.path.dirname(queue_path))
+        dirname = os.path.dirname(queue_path)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
             open(queue_path, 'a').close()
         elif not os.path.isfile(queue_path):
             open(queue_path, 'a').close()
