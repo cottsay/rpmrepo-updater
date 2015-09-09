@@ -8,6 +8,7 @@ import sys
 from distutils.version import LooseVersion
 
 parser = argparse.ArgumentParser()
+possible_arches = ['SRPMS', 'armhfp', 'i386', 'x86_64']
 
 def is_dir_readable(path):
     if not os.path.isdir(path):
@@ -24,7 +25,7 @@ def is_dir_writeable(path):
     return path
 
 # Options
-parser.add_argument('--arches', dest='arch', nargs='+', help='Architecture(s) to sync', choices=['SRPMS', 'armhfp', 'i386', 'x86_64'])
+parser.add_argument('--arches', dest='arch', nargs='+', help='Architecture(s) to sync', choices=possible_arches)
 parser.add_argument('--commit', dest='commit', action='store_true', default=False, help='Actually perform sync')
 parser.add_argument('--hardlink', dest='hardlink', action='store_true', default=False, help='Perform a hard link instead of copy')
 parser.add_argument('--release', dest='release', nargs='+', type=int, help='Fedora release(s) to sync')
@@ -118,6 +119,9 @@ def load_repo(path, releases=[], arches=[]):
 
         for arch in relarches:
             archpath = os.path.join(relpath, arch)
+            if not arch in possible_arches:
+                dbg('Ignoring invalid arch dir \'{0}\''.format(archpath))
+                continue
             ret[release][arch] = createrepo_updater.cr_get_pkg_list(archpath, log=dbghandle)
 
     return ret
